@@ -1,0 +1,12 @@
+{
+  "name": "angular-datastore",
+  "description": "angular-datastore",
+  "author":"Christian Blaschke <mail@platdesign.de>",
+  "version": "0.0.0",
+  "dependencies": {},
+  "repository": "",
+  "devDependencies": {
+    "gulp": "^3.8.10",
+    "pd-gulp-js-task": "git://github.com/platdesign/pd-gulp-js-task"
+  }
+}
