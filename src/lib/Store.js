@@ -48,6 +48,7 @@ proto.resource = function(resourceName) {
 };
 
 proto.sync = function(method, url, body, query) {
+	method = method.toLowerCase();
 
 	var url = this.config.url + (url || '') + (query ? '?'+$.param(query) : '');
 

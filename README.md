@@ -8,7 +8,7 @@ Require `pd` to your angular-app.
 
 Create a `backend` service, which defines your backend-structure.
 	
-	myApp.service('backend', function(DS){
+	myApp.factory('backend', function(DS){
 	
 		var store = DS.connect({
 			url: './backend'

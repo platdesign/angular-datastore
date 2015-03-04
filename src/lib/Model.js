@@ -19,22 +19,34 @@ var Model = module.exports = stdClass.extend({
 		});
 
 		this.__private = function(key, setter) {
-			if(setter) {
+			if(setter || setter === null) {
 				_private[key] = setter;
 			} else {
 				return _private[key];
 			}
 		};
+
+		this._state('idle');
+	},
+
+	_state: function(set) {
+		if(set) {
+			this.__private('state', set);
+		} else {
+			return this.__private('state');
+		}
 	},
 
 	_initializeSettersAndGetters: function() {
+
 		var model = this;
 		var statics = this.static;
 		var schema = statics.schema;
 
-		registerGettersSetters(model, model.__private('attrs'), schema, function onChange() {
+		registerGettersSetters(model, model.__private('attrs'), schema, function onChange(newVal, key, parent, parentKey) {
+			model.__private('lastChange', new Date().getTime());
 			model._triggerAutosaver();
-		});
+		}, 'model');
 
 		if(statics.__children) {
 			Object.keys(statics.__children).forEach(function(key) {
@@ -55,8 +67,13 @@ var Model = module.exports = stdClass.extend({
 
 
 	set: function(attrs) {
+		//this.__private('attrs', attrs);
+		//this._initializeSettersAndGetters();
+
+
+
 		var that = this;
-		var modelAttrs = this.__private('attrs');
+		//var modelAttrs = this.__private('attrs');
 
 		var oldAutsaveStatus = this.autosave;
 		this.autosave = false;
@@ -65,15 +82,17 @@ var Model = module.exports = stdClass.extend({
 		});
 		this.autosave = oldAutsaveStatus;
 		//extend(true, modelAttrs, attrs);
+
 	},
 
 	_initializeAutosaver: function() {
-		this.__autosaveTimer;
+		this.__autosaveTimer = undefined;
 		this.autosave = true;
 	},
 	_triggerAutosaver: function() {
 		if(this.autosave) {
 			var that = this;
+
 			clearTimeout(this.__autosaveTimer);
 			this.__autosaveTimer = setTimeout(function() {
 				if(that.autosave) {
@@ -89,11 +108,21 @@ var Model = module.exports = stdClass.extend({
 
 
 
-	sync: function(RESTMethod, query) {
+	sync: function(RESTMethod, query, body) {
 		var url = this.url(RESTMethod);
 		var conf = this.static.config.REST[RESTMethod];
-		var that = this;
-		return this.static.resource.store.sync(conf.method, url, (conf.includeObj? this :null), query);
+		return this.static.resource.store.sync(conf.method, url, (conf.includeObj ? this : body ), query);
+	},
+
+
+	syncREST: function(conf, query, body) {
+		var url = this.url(RESTMethod);
+		return this.static.resource.store.sync(conf.method, url, (conf.includeObj ? this : body ), query);
+	},
+
+	syncSubRoute: function(method, subUrl, query, body) {
+		var url = this.url() + subUrl;
+		return this.static.resource.store.sync(method, url, body, query);
 	},
 
 
@@ -102,7 +131,9 @@ var Model = module.exports = stdClass.extend({
 		return (this.parent?this.parent.url('get'):'') + this.static.url(RESTMethod, this);
 	},
 
-
+	_urlTemplate2url: function(template) {
+		return (this.parent ? this.parent.url('get') : '') + this.static._urlTemplate2url(template, this);
+	},
 
 
 
@@ -113,10 +144,21 @@ var Model = module.exports = stdClass.extend({
 	save: function() {
 		var that = this;
 
-		return this.sync((this.id ? 'put' : 'post')).then(function (rawAttrs) {
-			that.set(rawAttrs);
+		that._state('saving');
+		var saveStart = new Date().getTime();
+
+		return this.sync((this.id ? 'put' : 'post'))
+		.then(function (rawAttrs) {
+
+			if(that.__private('lastChange') < saveStart) {
+				that.set(rawAttrs);
+			}
+
+			that._state('idle');
 			return that;
 		});
+
+
 	},
 
 	destroy: function() {
@@ -189,10 +231,12 @@ var Model = module.exports = stdClass.extend({
 	url: function(RESTMethod, data) {
 		RESTMethod = RESTMethod || 'getIndex';
 		var urlTemplate = this.config.REST[RESTMethod].url;
-		return (this.parent ? this.parent.url() : '') + this.config.url + uriTemplateReplace(urlTemplate, data||{});
+		return this._urlTemplate2url(urlTemplate, data);
 	},
 
-
+	_urlTemplate2url: function(template, scope) {
+		return (this.parent ? this.parent.url() : '') + this.config.url + uriTemplateReplace(template, scope||{});
+	},
 
 
 
@@ -242,18 +286,19 @@ var Model = module.exports = stdClass.extend({
 		var existing = this.resource.findById(id);
 		if(existing) {
 			this.sync('get', {id:id});
-			var d = this.resource.store._services.Q.defer();
-			d.resolve(existing);
-			return d.promise;
+
+			return this.resource.store._services.Q.when( this.cast( existing ) );
 		}
 
 		return this.sync('get', {id:id});
 	},
 
+
 	create: function(attrs) {
 		var that = this;
 		return this.sync('post', attrs).then(function(model) {
 			that.resource.equipCollections();
+			return model;
 		});
 	},
 
@@ -276,10 +321,13 @@ var Model = module.exports = stdClass.extend({
 		copy.parent = this;
 		this.__children = this.__children || {};
 		this.__children[config.as] = copy;
-	}
+	},
 
 
-
+	// Cast model to this (important for url-building, parenting, etc)
+	cast: function(model) {
+		return this.raw2instance( model.__private('attrs') );
+	},
 
 
 

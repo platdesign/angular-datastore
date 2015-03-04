@@ -1,7 +1,7 @@
 'use strict';
 
 var Store = require('../lib/Store.js');
-
+var Types = require('../lib/Types.js');
 
 module.exports = function() {
 
@@ -17,6 +17,8 @@ module.exports = function() {
 			});
 			return store;
 		};
+
+		service.Types = Types;
 
 		return service;
 
